@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <title>Acompanhamento Campanhas</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2"></script>
+    <style>
+        :root {
+            --royal: #003366;
+            --fundo: #f4f7fa;
+            --cyan: #00d4ff;
+            --coral: #ff6b6b;
+            --texto: #2c3e50;
+        }
+
+        body { font-family: 'Segoe UI', sans-serif; background: var(--fundo); margin: 0; padding: 20px; color: var(--texto); }
+        
+        .header { 
+            background: linear-gradient(90deg, var(--royal), #0056b3); color: white; padding: 20px 30px; 
+            border-radius: 15px; display: flex; justify-content: space-between; align-items: center;
+            margin-bottom: 25px; box-shadow: 0 5px 15px rgba(0,0,0,0.15);
+        }
+        .controls { display: flex; gap: 12px; }
+        select, input { padding: 12px; border-radius: 8px; border: none; outline: none; font-weight: 500; }
+
+        .kpi-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 15px; margin-bottom: 25px; }
+        .card { background: white; padding: 18px; border-radius: 12px; border-bottom: 4px solid var(--royal); text-align: center; box-shadow: 0 3px 6px rgba(0,0,0,0.05); }
+        .card span { font-size: 10px; font-weight: 700; color: #7f8c8d; text-transform: uppercase; letter-spacing: 1px; }
+        .card h2 { margin: 8px 0 0; font-size: 20px; color: var(--royal); }
+        .card .perc { font-size: 13px; font-weight: bold; margin-top: 5px; display: block; }
+
+        .main-layout { display: grid; grid-template-columns: 2.2fr 1fr; gap: 20px; }
+        .chart-container { background: white; padding: 25px; border-radius: 15px; box-shadow: 0 4px 12px rgba(0,0,0,0.05); }
+        
+        .efficiency-bar { display: flex; gap: 15px; margin-top: 20px; padding-top: 20px; border-top: 2px solid var(--fundo); }
+        .eff-box { flex: 1; padding: 15px; border-radius: 10px; display: flex; align-items: center; gap: 10px; font-size: 14px; }
+        .eff-good { background: #e0f9f1; border: 1px solid var(--cyan); color: #008169; }
+        .eff-bad { background: #fff1f1; border: 1px solid var(--coral); color: #b71c1c; }
+
+        .performance-box { background: white; padding: 25px; border-radius: 15px; box-shadow: 0 4px 12px rgba(0,0,0,0.05); }
+        .rank-item { padding: 12px 0; border-bottom: 1px solid #f1f1f1; }
+        .rank-name { font-weight: bold; font-size: 13px; color: var(--royal); }
+        .rank-val { font-weight: 800; font-size: 13px; color: #27ae60; }
+        .rank-foco { font-size: 10px; color: #666; background: #f9f9f9; padding: 3px 6px; border-radius: 4px; display: inline-block; margin-top: 4px; }
+    </style>
+</head>
+<body>
+
+<div class="header">
+    <div style="display:flex; align-items:center; gap:15px">
+        <h1 style="margin:0; font-size: 22px;">Cockpit de Campanhas</h1>
+    </div>
+    <div class="controls">
+        <input type="file" id="upload" accept=".xlsx, .csv">
+        <select id="selCoord"><option value="">Todos Coordenadores</option></select>
+        <select id="selMarca"><option value="">Todas Marcas</option></select>
+    </div>
+</div>
+
+<div class="kpi-grid">
+    <div class="card"><span>Faturamento Total</span><h2 id="kpi-venda">R$ 0,00</h2></div>
+    <div class="card"><span>Base de Clientes</span><h2 style="color:var(--royal)">5.967</h2><span class="perc" style="color:#7f8c8d">Estático</span></div>
+    <div class="card"><span>Clientes Atendidos</span><h2 id="kpi-cli-com" style="color:var(--cyan)">0</h2><span id="perc-com" class="perc" style="color:var(--cyan)">0%</span></div>
+    <div class="card"><span>Clientes s/ Compra</span><h2 id="kpi-cli-sem" style="color:var(--coral)">0</h2><span id="perc-sem" class="perc" style="color:var(--coral)">0%</span></div>
+    <div class="card"><span>Vendedores Ativos</span><h2 id="kpi-vend-com">0</h2><span class="perc" id="total-vend">Equipe</span></div>
+</div>
+
+<div class="main-layout">
+    <div class="chart-container">
+        <h3 style="margin:0 0 20px 0; font-size:18px">Evolução por Marca</h3>
+        <div style="height: 350px;"><canvas id="chartMarcas"></canvas></div>
+        
+        <div class="efficiency-bar">
+            <div class="eff-box eff-good">
+                <div style="font-size:24px">🚀</div>
+                <div><small>Melhor Performance:</small><br><strong id="top-marca-nome">-</strong></div>
+            </div>
+            <div class="eff-box eff-bad">
+                <div style="font-size:24px">⚠️</div>
+                <div><small>Pior Performance:</small><br><strong id="low-marca-nome">-</strong></div>
+            </div>
+        </div>
+    </div>
+
+    <div class="performance-box">
+        <h3 style="margin:0 0 15px 0; font-size:16px; color:var(--royal)">Top Destaques</h3>
+        <div id="rank-top"></div>
+        <h3 style="margin:30px 0 15px 0; font-size:16px; color:var(--coral)">Menor Performance</h3>
+        <div id="rank-low"></div>
+    </div>
+</div>
+
+<script>
+    let dados = [];
+    const BASE_CLIENTES = 5967;
+    let chart;
+    Chart.register(ChartDataLabels);
+
+    // Função para buscar colunas mesmo que o nome mude um pouco (ex: "FATURA" ou "FATURAMENT")
+    function getCol(obj, termo) {
+        const key = Object.keys(obj).find(k => k.toUpperCase().includes(termo.toUpperCase()));
+        return key ? obj[key] : null;
+    }
+
+    // Função para converter "R$ 1.234,56" em número real
+    function parseMoeda(valor) {
+        if (!valor) return 0;
+        if (typeof valor === 'number') return valor;
+        let limpo = valor.toString().replace("R$", "").replace(/\./g, "").replace(",", ".").trim();
+        return parseFloat(limpo) || 0;
+    }
+
+    document.getElementById('upload').addEventListener('change', function(e) {
+        const reader = new FileReader();
+        reader.onload = (evt) => {
+            const wb = XLSX.read(evt.target.result, {type: 'binary'});
+            const ws = wb.Sheets[wb.SheetNames[0]];
+            dados = XLSX.utils.sheet_to_json(ws, { defval: "" });
+            popularFiltros();
+            processar();
+        };
+        reader.readAsBinaryString(e.target.files[0]);
+    });
+
+    function popularFiltros() {
+        const sc = document.getElementById('selCoord');
+        const sm = document.getElementById('selMarca');
+        
+        const coords = [...new Set(dados.map(d => getCol(d, 'COORDENADOR')))].filter(c => c && c !== '#N/D').sort();
+        const marcas = [...new Set(dados.map(d => getCol(d, 'MARCA')))].filter(Boolean).sort();
+        
+        sc.innerHTML = '<option value="">Todos Coordenadores</option>';
+        sm.innerHTML = '<option value="">Todas Marcas</option>';
+        coords.forEach(c => sc.innerHTML += `<option value="${c}">${c}</option>`);
+        marcas.forEach(m => sm.innerHTML += `<option value="${m}">${m}</option>`);
+        
+        sc.onchange = processar;
+        sm.onchange = processar;
+    }
+
+    function formatMoney(v) {
+        if (v >= 1000000) return 'R$ ' + (v/1000000).toFixed(1) + 'M';
+        if (v >= 1000) return 'R$ ' + (v/1000).toFixed(1) + 'k';
+        return 'R$ ' + v.toFixed(0);
+    }
+
+    function processar() {
+        const cSel = document.getElementById('selCoord').value;
+        const mSel = document.getElementById('selMarca').value;
+        
+        const filtrados = dados.filter(d => 
+            (!cSel || getCol(d, 'COORDENADOR') === cSel) &&
+            (!mSel || getCol(d, 'MARCA') === mSel)
+        );
+
+        const vTotal = filtrados.reduce((acc, cur) => acc + parseMoeda(getCol(cur, 'FATURA')), 0);
+        const cliCom = filtrados.filter(d => (Number(getCol(d, 'CLIENTES')) || 0) > 0).length;
+        const cliSem = BASE_CLIENTES - cliCom;
+
+        document.getElementById('kpi-venda').innerText = vTotal.toLocaleString('pt-br',{style:'currency', currency:'BRL'});
+        document.getElementById('kpi-cli-com').innerText = cliCom.toLocaleString();
+        document.getElementById('kpi-cli-sem').innerText = cliSem.toLocaleString();
+        document.getElementById('kpi-vend-com').innerText = filtrados.filter(d => parseMoeda(getCol(d, 'FATURA')) > 0).length;
+
+        document.getElementById('perc-com').innerText = ((cliCom / BASE_CLIENTES) * 100).toFixed(1) + '%';
+        document.getElementById('perc-sem').innerText = ((cliSem / BASE_CLIENTES) * 100).toFixed(1) + '%';
+
+        renderChart(filtrados);
+        renderPerformance(filtrados);
+    }
+
+    function renderPerformance(lista) {
+        const agrupado = lista.reduce((acc, cur) => {
+            const n = getCol(cur, 'NOME') || 'Sem Nome';
+            if(!acc[n]) acc[n] = { nome: n, v: 0, m: {} };
+            const valor = parseMoeda(getCol(cur, 'FATURA'));
+            acc[n].v += valor;
+            const marca = getCol(cur, 'MARCA') || 'N/A';
+            acc[n].m[marca] = (acc[n].m[marca] || 0) + valor;
+            return acc;
+        }, {});
+
+        const vends = Object.values(agrupado).filter(x => x.v > 0).sort((a,b) => b.v - a.v);
+        
+        const rankHtml = (arr, color) => arr.map(v => {
+            const marcasOrd = Object.entries(v.m).sort((a,b)=>b[1]-a[1]);
+            const f = marcasOrd.length > 0 ? marcasOrd[0][0] : 'N/A';
+            return `<div class="rank-item">
+                <div style="display:flex; justify-content:space-between">
+                    <span class="rank-name">${v.nome}</span>
+                    <span class="rank-val" style="color:${color}">R$ ${v.v.toLocaleString('pt-br')}</span>
+                </div>
+                <div class="rank-foco">Foco: <b>${f}</b></div>
+            </div>`;
+        }).join('');
+
+        document.getElementById('rank-top').innerHTML = rankHtml(vends.slice(0, 3), '#27ae60');
+        document.getElementById('rank-low').innerHTML = rankHtml(vends.slice(-3).reverse(), 'var(--coral)');
+    }
+
+    function renderChart(lista) {
+        const ctx = document.getElementById('chartMarcas').getContext('2d');
+        if(chart) chart.destroy();
+        
+        const resumo = lista.reduce((acc, cur) => { 
+            const m = getCol(cur, 'MARCA') || 'Outros';
+            acc[m] = (acc[m] || 0) + parseMoeda(getCol(cur, 'FATURA')); 
+            return acc; 
+        }, {});
+        
+        const sorted = Object.entries(resumo).sort((a,b) => b[1] - a[1]);
+        if(sorted.length > 0) {
+            document.getElementById('top-marca-nome').innerText = sorted[0][0];
+            document.getElementById('low-marca-nome').innerText = sorted[sorted.length-1][0];
+        }
+
+        chart = new Chart(ctx, {
+            type: 'bar',
+            data: { 
+                labels: Object.keys(resumo), 
+                datasets: [{ data: Object.values(resumo), backgroundColor: '#003366', borderRadius: 6 }] 
+            },
+            options: {
+                responsive: true, maintainAspectRatio: false,
+                plugins: {
+                    datalabels: { anchor: 'end', align: 'top', font: { weight: 'bold', size: 11 }, formatter: (v) => formatMoney(v) },
+                    legend: { display: false }
+                },
+                scales: { y: { display: false }, x: { grid: { display: false } } }
+            }
+        });
+    }
+</script>
+</body>
+</html>
